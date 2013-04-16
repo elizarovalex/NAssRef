@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows;
 using System.Windows.Input;
@@ -20,11 +22,18 @@ namespace AssRef.ViewModels
 		private readonly IFileSource _fileSource;
 		private AssRefItem[] _assRefModels;
 		private string _filterText;
-		private SimpleDelayer _refreshDelay;
-		private Dispatcher _dispatcher;
+		private readonly SimpleDelayer _refreshDelay;
+		private readonly Dispatcher _dispatcher;
 		private Dictionary<string, HashSet<string>> _errorIndex = new Dictionary<string, HashSet<string>>();
 		private GroupTypes _groupType;
 		private ObservableCollection<string> _directoryHistory = new ObservableCollection<string>();
+
+		private readonly List<HistoryFilterItem> _historyFilterList = new List<HistoryFilterItem>();
+		private int _historyFilterIndex;
+		private int _historyFilterCount;
+		private string _title;
+		private int _basePathCount;
+		private bool _isUseSubdir;
 
 		public MainViewModel()
 		{
@@ -33,25 +42,81 @@ namespace AssRef.ViewModels
 			_fileSource = new FileSource();
 			_refreshDelay = new SimpleDelayer();
 			_refreshDelay.Execute += OnRefreshDelayExecute;
+
+			ChangeTitle();
+			ResetHistoryFilter();
+
 			ChangeDirectoryPathCommand = new DelegateCommand(ChangeDirectoryPathCommandHandler);
+			BackwardHistoryFilterCommand = new DelegateCommand(BackwardHistoryFilterCommandHandler, CanBackwardHistoryFilterCommandHandler);
+			ForwardHistoryFilterCommand = new DelegateCommand(ForwardHistoryFilterCommandHandler, CanForwardHistoryFilterCommandHandler);
 
 			LoadDirectoryHistory();
 		}
 
+		private void ResetHistoryFilter()
+		{
+			_historyFilterIndex = -1;
+			_historyFilterCount = 0;
+		}
+
+		private bool CanForwardHistoryFilterCommandHandler(object obj)
+		{
+			return _historyFilterIndex < _historyFilterCount - 1;
+		}
+
+		private void ForwardHistoryFilterCommandHandler(object obj)
+		{
+			_historyFilterIndex++;
+			ApplyCurrentHistoryFilterItem();
+		}
+
+		private bool CanBackwardHistoryFilterCommandHandler(object obj)
+		{
+			return _historyFilterIndex > 0;
+		}
+
+		private void BackwardHistoryFilterCommandHandler(object obj)
+		{
+			_historyFilterIndex--;
+			ApplyCurrentHistoryFilterItem();
+		}
+
+		private void ApplyCurrentHistoryFilterItem()
+		{
+			var filterItem = _historyFilterList[_historyFilterIndex];
+
+			_filterText = filterItem.Filter;
+			OnPropertyChanged(() => FilterText);
+
+			_groupType = filterItem.GroupType;
+			OnPropertyChanged(() => GroupType);
+
+			RefreshList(false);
+		}
+
 		private void OnRefreshDelayExecute()
 		{
-			_dispatcher.Invoke(new Action(RefreshList));
+			_dispatcher.Invoke(new Action(() => RefreshList(true)));
 		}
 
 		private void ChangeDirectoryPathCommandHandler(object obj)
 		{
-			_assRefModels = _fileSource.GetAssRefList(DirectoryPath);
+			_assRefModels = _fileSource.GetAssRefList(DirectoryPath, IsUseSubdir);
 
-			RefreshErrorIndex();
+			ResetHistoryFilter();
 
-			RefreshList();
+			RefreshIndex();
+
+			RefreshList(true);
 
 			SaveDirectoryHistory();
+
+			ChangeTitle();
+		}
+
+		private void ChangeTitle()
+		{
+			Title = "NAssRef v0.1 - " + DirectoryPath;
 		}
 
 		private void LoadDirectoryHistory()
@@ -70,8 +135,16 @@ namespace AssRef.ViewModels
 						{
 							break;
 						}
-						strs.Add(line.Trim());
+						var s = line.Trim();
+						if (Directory.Exists(s))
+						{
+							strs.Add(s);
+						}
 					}
+				}
+				if (5 < strs.Count)
+				{
+					strs = new HashSet<string>(strs.Skip(strs.Count - 5));
 				}
 				DirectoryHistory = new ObservableCollection<string>(strs);
 			}
@@ -105,13 +178,25 @@ namespace AssRef.ViewModels
 			DirectoryHistory = new ObservableCollection<string>(strs);
 		}
 
-		private void RefreshErrorIndex()
+		private void RefreshIndex()
 		{
 			var errorIndex = new Dictionary<string, HashSet<string>>();
 			if ((null != _assRefModels) && (0 < _assRefModels.Length))
 			{
+				var basePath = DirectoryPath;
 				foreach (var item in _assRefModels)
 				{
+					while (!string.IsNullOrEmpty(basePath))
+					{
+						if (!item.FileName.StartsWith(basePath))
+						{
+							basePath = Path.GetDirectoryName(basePath);
+						}
+						else
+						{
+							break;
+						}
+					}
 					HashSet<string> ver;
 					if (!errorIndex.TryGetValue(item.AssemblyName, out ver))
 					{
@@ -120,20 +205,42 @@ namespace AssRef.ViewModels
 					}
 					ver.Add(item.AssemblyVersion);
 				}
+
+				if (!string.IsNullOrWhiteSpace(basePath) && !basePath.EndsWith(Path.DirectorySeparatorChar.ToString(CultureInfo.InvariantCulture)))
+				{
+					basePath += Path.DirectorySeparatorChar.ToString(CultureInfo.InvariantCulture);
+				}
+
+				_basePathCount = (basePath ?? "").Trim().Length;
 			}
 			_errorIndex = errorIndex;
 		}
 
-		private void RefreshList()
+		private void RefreshList(bool inHistory)
 		{
 			if ((null == _assRefModels) || (0 == _assRefModels.Length))
 			{
 				AssRefList = null;
 				return;
 			}
-			var filter1 = string.IsNullOrWhiteSpace(FilterText)
-				? (Func<AssRefItem, string, bool>)((m, fs) => true)
-				: (Func<AssRefItem, string, bool>)((m, fs) => m.AssemblyName.StartsWith(fs));
+			Func<AssRefItem, string, bool> filter1;
+			if (string.IsNullOrWhiteSpace(FilterText))
+			{
+				filter1 = (m, fs) => true;
+			}
+			else
+			{
+				Regex regex;
+				try
+				{
+					regex = new Regex(FilterText);
+				}
+				catch
+				{
+					return;
+				}
+				filter1 = (m, fs) => regex.IsMatch(m.AssemblyName);
+			}
 			var filter2 = GroupTypes.FileName == GroupType
 				? (Func<AssRefItem, bool>)(m => true)
 				: (Func<AssRefItem, bool>)(m => 1 < _errorIndex[m.AssemblyName].Count);
@@ -141,13 +248,28 @@ namespace AssRef.ViewModels
 			AssRefList = new ObservableCollection<AssRefItemViewModel>(
 				_assRefModels.Where(m => filter1(m, fStr) && filter2(m)).Select(m => new AssRefItemViewModel
 				{
-					FileName = m.FileName,
+					FileName = m.FileName.Substring(_basePathCount),
 					AssemblyName = m.AssemblyName,
 					AssemblyVersion = m.AssemblyVersion,
 					AssemblyPublicKey = m.AssemblyPublicKey,
 					IsErrorVersion = 1 < _errorIndex[m.AssemblyName].Count,
 					GroupType = GroupType
 				}));
+
+			if (inHistory)
+			{
+				_historyFilterIndex++;
+				var item = new HistoryFilterItem { Filter = FilterText, GroupType = GroupType };
+				if (_historyFilterIndex >= _historyFilterList.Count)
+				{
+					_historyFilterList.Add(item);
+				}
+				else
+				{
+					_historyFilterList[_historyFilterIndex] = item;
+				}
+				_historyFilterCount = _historyFilterIndex + 1;
+			}
 		}
 
 		public string FilterText
@@ -176,7 +298,35 @@ namespace AssRef.ViewModels
 				}
 				_groupType = value;
 				OnPropertyChanged(() => GroupType);
-				RefreshList();
+				RefreshList(true);
+			}
+		}
+
+		public string Title
+		{
+			get { return _title; }
+			set
+			{
+				if (value == _title)
+				{
+					return;
+				}
+				_title = value;
+				OnPropertyChanged(() => Title);
+			}
+		}
+
+		public bool IsUseSubdir
+		{
+			get { return _isUseSubdir; }
+			set
+			{
+				if (value == _isUseSubdir)
+				{
+					return;
+				}
+				_isUseSubdir = value;
+				OnPropertyChanged(() => IsUseSubdir);
 			}
 		}
 
@@ -223,10 +373,12 @@ namespace AssRef.ViewModels
 		}
 
 		public ICommand ChangeDirectoryPathCommand { get; private set; }
+		public ICommand ForwardHistoryFilterCommand { get; private set; }
+		public ICommand BackwardHistoryFilterCommand { get; private set; }
 
 		private class SimpleDelayer
 		{
-			private Thread _thread;
+			private readonly Thread _thread;
 			private DateTime _time;
 			private bool _isSet;
 
@@ -268,6 +420,13 @@ namespace AssRef.ViewModels
 			}
 
 			public event Action Execute;
+		}
+
+		private class HistoryFilterItem
+		{
+			public string Filter { get; set; }
+
+			public GroupTypes GroupType { get; set; }
 		}
 	}
 }

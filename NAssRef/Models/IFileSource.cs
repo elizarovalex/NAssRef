@@ -2,6 +2,6 @@
 {
 	public interface IFileSource
 	{
-		AssRefItem[] GetAssRefList(string directoryPath);
+		AssRefItem[] GetAssRefList(string directoryPath, bool isUseSubdir);
 	}
 }

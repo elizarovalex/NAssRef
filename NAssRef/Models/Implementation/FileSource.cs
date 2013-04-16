@@ -8,22 +8,35 @@ namespace AssRef.Models.Implementation
 {
 	public class FileSource : MarshalByRefObject, IFileSource
 	{
-		public AssRefItem[] GetAssRefList(string directoryPath)
+		public AssRefItem[] GetAssRefList(string directoryPath, bool isUseSubdir)
 		{
 			if (!Directory.Exists(directoryPath))
 			{
 				return new AssRefItem[0];
 			}
-			var files = Directory.GetFiles(directoryPath, "*.dll").ToList();
-			files.AddRange(Directory.GetFiles(directoryPath, "*.exe"));
+			var searchOption = isUseSubdir ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+			var files = Directory.GetFiles(directoryPath, "*.dll", searchOption).ToList();
+			files.AddRange(Directory.GetFiles(directoryPath, "*.exe", searchOption));
 
-			var appD = AppDomain.CreateDomain("ExploreAssemblies");
-			var innerFs = (FileSource)appD.CreateInstanceAndUnwrap(typeof(FileSource).Assembly.FullName, typeof(FileSource).FullName);
+			var localAppD = AppDomain.CreateDomain("ExploreAssemblies");
+			var localInnerFs = (FileSource)localAppD.CreateInstanceAndUnwrap(typeof(FileSource).Assembly.FullName, typeof(FileSource).FullName);
+
+			var getAppD = isUseSubdir
+				? (Func<AppDomain>)(() => AppDomain.CreateDomain("ExploreAssemblies"))
+				: (Func<AppDomain>)(() => localAppD ?? (localAppD = AppDomain.CreateDomain("ExploreAssemblies")));
+			var getInnerFs = isUseSubdir
+				? (Func<AppDomain, FileSource>)(d => (FileSource)d.CreateInstanceAndUnwrap(typeof(FileSource).Assembly.FullName, typeof(FileSource).FullName))
+				: (Func<AppDomain, FileSource>)(d => localInnerFs ?? (localInnerFs = (FileSource)d.CreateInstanceAndUnwrap(typeof(FileSource).Assembly.FullName, typeof(FileSource).FullName)));
+			var freeAppD = isUseSubdir
+				? (Action<AppDomain>)(AppDomain.Unload)
+				: (Action<AppDomain>)(d => { });
 
 			var res = new List<AssRefItem>();
 
 			foreach (var file in files)
 			{
+				var appD = getAppD();
+				var innerFs = getInnerFs(appD);
 				string[] refs;
 				string[] vers;
 				string[] keys;
@@ -36,8 +49,12 @@ namespace AssRef.Models.Implementation
 						AssemblyVersion = vers[i],
 						AssemblyPublicKey = keys[i]
 					}));
+				freeAppD(appD);
 			}
-			AppDomain.Unload(appD);
+			if (null != localAppD)
+			{
+				AppDomain.Unload(localAppD);
+			}
 
 			return res.ToArray();
 		}

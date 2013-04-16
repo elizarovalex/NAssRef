@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ViewModels="clr-namespace:AssRef.ViewModels"
         xmlns:Views="clr-namespace:AssRef.Views"
-        Title="NAssRef v0.1" Height="450" Width="725">
+        Title="{Binding Title}" Height="450" Width="725">
     <Window.Resources>
         <ResourceDictionary>
             <CollectionViewSource x:Key="AssembliesSource" Source="{Binding AssRefList}">
@@ -28,16 +28,21 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Text="Assemblies path:" VerticalAlignment="Center" />
             <ComboBox Grid.Column="1" IsEditable="True" KeyDown="OnDirectoryPathKeyDown" Margin="6"
                       Text="{Binding DirectoryPath, Mode=TwoWay}"
                       ItemsSource="{Binding DirectoryHistory}" />
-            <Button Grid.Column="2" Content="Refresh" Margin="6"
+            <CheckBox Grid.Column="2" Content="Use subdir" VerticalAlignment="Center" Margin="6"
+                      IsChecked="{Binding IsUseSubdir}"/>
+            <Button Grid.Column="3" Content="Refresh" Margin="6"
                     Command="{Binding ChangeDirectoryPathCommand}" />
         </Grid>
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="6">
-            <TextBlock Text="Filter:" VerticalAlignment="Center"/>
+            <Button Content="  &lt;  " VerticalAlignment="Center" Command="{Binding BackwardHistoryFilterCommand}" />
+            <Button Content="  &gt;  " VerticalAlignment="Center" Command="{Binding ForwardHistoryFilterCommand}" />
+            <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="12 0 0 0"/>
             <TextBox Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="6" Width="200" />
             <TextBlock Text="Group:" VerticalAlignment="Center" Margin="12 0 0 0" />
             <RadioButton Content="File" GroupName="g" VerticalAlignment="Center" Margin="6"
