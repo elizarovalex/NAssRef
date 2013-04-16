@@ -1,0 +1,96 @@
+﻿<Window x:Class="AssRef.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ViewModels="clr-namespace:AssRef.ViewModels"
+        xmlns:Views="clr-namespace:AssRef.Views"
+        Title="NAssRef v0.1" Height="450" Width="725">
+    <Window.Resources>
+        <ResourceDictionary>
+            <CollectionViewSource x:Key="AssembliesSource" Source="{Binding AssRefList}">
+                <CollectionViewSource.GroupDescriptions>
+                    <PropertyGroupDescription PropertyName="GroupName"></PropertyGroupDescription>
+                </CollectionViewSource.GroupDescriptions>
+            </CollectionViewSource>
+
+            <Views:EnumMatchToBooleanConverter x:Key="enumConverter" />
+        </ResourceDictionary>
+    </Window.Resources>
+    <Window.DataContext>
+        <ViewModels:MainViewModel />
+    </Window.DataContext>
+    <Grid Margin="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Assemblies path:" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" IsEditable="True" KeyDown="OnDirectoryPathKeyDown" Margin="6"
+                      Text="{Binding DirectoryPath, Mode=TwoWay}"
+                      ItemsSource="{Binding DirectoryHistory}" />
+            <Button Grid.Column="2" Content="Refresh" Margin="6"
+                    Command="{Binding ChangeDirectoryPathCommand}" />
+        </Grid>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="6">
+            <TextBlock Text="Filter:" VerticalAlignment="Center"/>
+            <TextBox Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="6" Width="200" />
+            <TextBlock Text="Group:" VerticalAlignment="Center" Margin="12 0 0 0" />
+            <RadioButton Content="File" GroupName="g" VerticalAlignment="Center" Margin="6"
+                         IsChecked="{Binding GroupType, Mode=TwoWay, Converter={StaticResource enumConverter}, ConverterParameter=FileName}" />
+            <RadioButton Content="Conflict" GroupName="g" VerticalAlignment="Center" Margin="6"
+                         IsChecked="{Binding GroupType, Mode=TwoWay, Converter={StaticResource enumConverter}, ConverterParameter=AssemblyError}" />
+        </StackPanel>
+        <DataGrid Grid.Row="2"
+                  IsReadOnly="True"
+                  ItemsSource="{Binding Source={StaticResource AssembliesSource}}"
+                  AutoGenerateColumns="False"
+                  GridLinesVisibility="Horizontal"
+                  VerticalGridLinesBrush="LightGray"
+                  HorizontalGridLinesBrush="LightGray"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  SelectionMode="Single"
+                  SelectionUnit="FullRow"
+                  ScrollViewer.CanContentScroll="True"
+                  RowHeight="30"
+                  >
+            <DataGrid.Resources>
+                <Style x:Key="GroupHeaderStyle" TargetType="{x:Type GroupItem}">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="{x:Type GroupItem}">
+                                <Expander IsExpanded="True">
+                                    <Expander.Header>
+                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" />
+                                    </Expander.Header>
+                                    <ItemsPresenter/>
+                                </Expander>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </DataGrid.Resources>
+            <DataGrid.GroupStyle>
+                <GroupStyle ContainerStyle="{StaticResource GroupHeaderStyle}" HidesIfEmpty="True">
+                    <GroupStyle.Panel>
+                        <ItemsPanelTemplate>
+                            <DataGridRowsPresenter/>
+                        </ItemsPanelTemplate>
+                    </GroupStyle.Panel>
+                </GroupStyle>
+            </DataGrid.GroupStyle>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="0.4*" />
+                <DataGridTextColumn Header="Reference" Binding="{Binding AssemblyName}" Width="0.4*" />
+                <DataGridTextColumn Header="Version" Binding="{Binding AssemblyVersion}" Width="0.1*" />
+                <DataGridTextColumn Header="Key" Binding="{Binding AssemblyPublicKey}" Width="0.09*" />
+                <DataGridTextColumn Header="" Width="0.01*"></DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Window>

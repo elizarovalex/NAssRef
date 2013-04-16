@@ -1,0 +1,7 @@
+
+/_ReSharper.NAssRef
+*.suo
+/NAssRef/bin
+/NAssRef/obj
+/NAssRef.sln
+/NAssRef/NAssRef.csproj.user
