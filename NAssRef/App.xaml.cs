@@ -14,21 +14,43 @@ namespace AssRef
 	/// </summary>
 	public partial class App : Application
 	{
+		private int _exitCode;
+
+		[STAThread]
+		public static int Main(string[] args)
+		{
+			if ((null == args) || (0 == args.Length))
+			{
+				ConsoleManager.Hide();
+			}
+
+			var app = new App();
+			app.InitializeComponent();
+			return app.Run();
+		}
+
 		protected override void OnStartup(StartupEventArgs e)
 		{
 			base.OnStartup(e);
 
 			if (0 < e.Args.Length)
 			{
-				ConsoleManager.AttachParentConsole();
 				var isConflict = new ConflictDetecter().Detect(e.Args);
-				Shutdown(isConflict ? 1 : 0);
+				_exitCode = isConflict ? 1 : 0;
+				Shutdown(_exitCode);
 				return;
 			}
 
 			ShutdownMode = ShutdownMode.OnMainWindowClose;
 			MainWindow = new MainWindow();
 			MainWindow.Show();
+		}
+
+		protected override void OnExit(ExitEventArgs e)
+		{
+			e.ApplicationExitCode = _exitCode;
+
+			base.OnExit(e);
 		}
 	}
 }
