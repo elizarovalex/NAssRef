@@ -180,39 +180,11 @@ namespace AssRef.ViewModels
 
 		private void RefreshIndex()
 		{
-			var errorIndex = new Dictionary<string, HashSet<string>>();
-			if ((null != _assRefModels) && (0 < _assRefModels.Length))
-			{
-				var basePath = DirectoryPath;
-				foreach (var item in _assRefModels)
-				{
-					while (!string.IsNullOrEmpty(basePath))
-					{
-						if (!item.FileName.StartsWith(basePath))
-						{
-							basePath = Path.GetDirectoryName(basePath);
-						}
-						else
-						{
-							break;
-						}
-					}
-					HashSet<string> ver;
-					if (!errorIndex.TryGetValue(item.AssemblyName, out ver))
-					{
-						ver = new HashSet<string>();
-						errorIndex.Add(item.AssemblyName, ver);
-					}
-					ver.Add(item.AssemblyVersion);
-				}
+			Dictionary<string, HashSet<string>> errorIndex;
+			string basePath;
+			new Indexer().CreateIndex(_assRefModels, DirectoryPath, out errorIndex, out basePath);
 
-				if (!string.IsNullOrWhiteSpace(basePath) && !basePath.EndsWith(Path.DirectorySeparatorChar.ToString(CultureInfo.InvariantCulture)))
-				{
-					basePath += Path.DirectorySeparatorChar.ToString(CultureInfo.InvariantCulture);
-				}
-
-				_basePathCount = (basePath ?? "").Trim().Length;
-			}
+			_basePathCount = (basePath ?? "").Trim().Length;
 			_errorIndex = errorIndex;
 		}
 

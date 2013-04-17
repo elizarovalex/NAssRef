@@ -55,7 +55,10 @@
     </ApplicationDefinition>
     <Compile Include="Models\AssRefItem.cs" />
     <Compile Include="Models\IFileSource.cs" />
+    <Compile Include="Models\Implementation\ConflictDetecter.cs" />
+    <Compile Include="Models\Implementation\ConsoleManager.cs" />
     <Compile Include="Models\Implementation\FileSource.cs" />
+    <Compile Include="Models\Implementation\Indexer.cs" />
     <Compile Include="ViewModels\AssRefItemViewModel.cs" />
     <Compile Include="ViewModels\DelegateCommand.cs" />
     <Compile Include="ViewModels\GroupTypes.cs" />
