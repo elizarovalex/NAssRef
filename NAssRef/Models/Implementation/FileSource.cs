@@ -18,30 +18,27 @@ namespace AssRef.Models.Implementation
 			var files = Directory.GetFiles(directoryPath, "*.dll", searchOption).ToList();
 			files.AddRange(Directory.GetFiles(directoryPath, "*.exe", searchOption));
 
-			var localAppD = AppDomain.CreateDomain("ExploreAssemblies");
-			var localInnerFs = (FileSource)localAppD.CreateInstanceAndUnwrap(typeof(FileSource).Assembly.FullName, typeof(FileSource).FullName);
-
-			var getAppD = isUseSubdir
-				? (Func<AppDomain>)(() => AppDomain.CreateDomain("ExploreAssemblies"))
-				: (Func<AppDomain>)(() => localAppD ?? (localAppD = AppDomain.CreateDomain("ExploreAssemblies")));
-			var getInnerFs = isUseSubdir
-				? (Func<AppDomain, FileSource>)(d => (FileSource)d.CreateInstanceAndUnwrap(typeof(FileSource).Assembly.FullName, typeof(FileSource).FullName))
-				: (Func<AppDomain, FileSource>)(d => localInnerFs ?? (localInnerFs = (FileSource)d.CreateInstanceAndUnwrap(typeof(FileSource).Assembly.FullName, typeof(FileSource).FullName)));
-			var freeAppD = isUseSubdir
-				? (Action<AppDomain>)(AppDomain.Unload)
-				: (Action<AppDomain>)(d => { });
+			AppDomain appD;
+			FileSource innerFs;
+			GetApp(out appD, out innerFs);
 
 			var res = new List<AssRefItem>();
 
 			foreach (var file in files)
 			{
-				var appD = getAppD();
-				var innerFs = getInnerFs(appD);
 				string[] refs;
 				string[] vers;
 				string[] keys;
 				Exception ex;
 				innerFs.GetRefs(file, out refs, out vers, out keys, out ex);
+				if (ex is FileLoadException)
+				{
+					AppDomain appD2;
+					FileSource innerFs2;
+					GetApp(out appD2, out innerFs2);
+					innerFs2.GetRefs(file, out refs, out vers, out keys, out ex);
+					AppDomain.Unload(appD2);
+				}
 				res.AddRange(refs.Select((t, i) => new AssRefItem
 					{
 						FileName = file,
@@ -49,14 +46,16 @@ namespace AssRef.Models.Implementation
 						AssemblyVersion = vers[i],
 						AssemblyPublicKey = keys[i]
 					}));
-				freeAppD(appD);
 			}
-			if (null != localAppD)
-			{
-				AppDomain.Unload(localAppD);
-			}
+			AppDomain.Unload(appD);
 
 			return res.ToArray();
+		}
+
+		private void GetApp(out AppDomain appD, out FileSource innerFs)
+		{
+			appD = AppDomain.CreateDomain("ExploreAssemblies");
+			innerFs = (FileSource)appD.CreateInstanceAndUnwrap(typeof(FileSource).Assembly.FullName, typeof(FileSource).FullName);
 		}
 
 		private void GetRefs(string file, out string[] refs, out string[] vers, out string[] keys, out Exception exception)
